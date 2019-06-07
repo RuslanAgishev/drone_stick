@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="joy_dev" default="/dev/input/js0" />
+
+  
+  <!-- run vicon bridge -->
+  <!-- <include file="$(find vicon_bridge)/launch/vicon.launch"/> -->
+
+  <!-- <include file="$(find crazyflie_demo)/launch/connect.launch"/> -->
+
+  <!-- <node pkg="crazyswarm" type="droneJoystick.py" name="droneJoystick" output="screen">
+  </node> -->
+
+  <node pkg="crazyswarm" type="niceHover.py" name="niceHover" output="screen">
+  </node>
+
+  <node pkg="crazyflie_demo" type="droneStick.py" name="droneStick" output="screen">
+  </node>
+
+
+</launch>
