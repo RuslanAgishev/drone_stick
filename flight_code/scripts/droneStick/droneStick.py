@@ -59,7 +59,7 @@ def landing():
 
         if drones[0].sp[2]<-0.5:
             print 'reached the floor'
-            os.system("rosnode kill recorder")
+            if data_recording: os.system("rosnode kill recorder")
             time.sleep(0.1)
             if toFly:
                 for t in range(3):
@@ -89,24 +89,28 @@ class Robot(Drone):
 
 
     def local_planner(self, obstacles_poses, params):
-        self.f = combined_potential(obstacles_poses, params.R_obstacles, self.sp[:2], params.obstacles_influence_radius)
+        # self.f = combined_potential(obstacles_poses, params.R_obstacles, self.sp[:2], params.obstacles_influence_radius)
+        self.f = combined_potential(obstacles_poses, self.sp[:2], params.obstacles_influence_radius)
         self.sp[:2] = gradient_planner(self.sp[:2], self.f)
         # self.route = np.vstack( [self.route, self.sp] )
 
 class Params:
     def __init__(self,):
         self.R_obstacles = 0.10 # [m]
-        self.obstacles_influence_radius = 1.2
-        self.l = 0.5 # [m], inter-drones distance
+        self.obstacles_influence_radius = 0.1 # [m]
+        self.l = 0.4 # [m], inter-drones distance
 
 rospy.init_node('CrazyflieAPI', anonymous=False)
 
 toFly          = 1
-TAKEOFFHEIGHT  = 1.0
+TAKEOFFHEIGHT  = 0.8
 TAKEOFFTIME    = 3.0
 LANDTIME       = 2.0
+JOYSTICK_TAKEOFF_HEIGHT = 0.8
+
 initialized    = False
 vel_koef       = 3.0
+yaw_koef       = 3.5
 put_limits       = 1
 # limits           = np.array([ 2.0, 2.0, 2.5 ]) # limits desining safety flight area in the room
 # limits_negative  = np.array([ -2.0, -2.0, -0.1 ])
@@ -120,7 +124,7 @@ data_recording = 0
 params = Params()
 
 # joystick
-drone_joystick_name = 'obstacle10' # 'cf3'
+drone_joystick_name = 'cf3' # 'cf3'
 drone_joystick = Drone(drone_joystick_name)
 
 # drones-followers
@@ -138,9 +142,11 @@ for name in cf_names:
 
 obstacles = []
 obstacles_poses = []
+# obstacles_names = []
 # obstacles_names = ['obstacle4', 'obstacle10', 'obstacle12', 'obstacle25']
 # obstacles_names = ['obstacle25', 'obstacle10', 'obstacle12',]#, 'obstacle4']
-obstacles_names = []
+# obstacles_names = ['obstacle10', 'obstacle13', 'obstacle15']
+obstacles_names = ['obstacle13']
 for name in obstacles_names:
     obstacle = swarmlib.Obstacle(name)
     obstacles.append( obstacle )
@@ -196,6 +202,8 @@ if __name__ == "__main__":
         for drone in drones: drone.pose = drone.position()
         roll = drone_joystick.orient[0] - mean_angles[0]
         pitch = drone_joystick.orient[1] - mean_angles[1]
+        yaw = drone_joystick.orient[2] - mean_angles[2]
+        dz = drone_joystick.pose[2] - JOYSTICK_TAKEOFF_HEIGHT
 
         # update obstacles poses
         for i in range(len(obstacles)):
@@ -212,28 +220,38 @@ if __name__ == "__main__":
 
         pitch_thresh = [0.05, 0.30]
         roll_thresh = [0.05, 0.30]
+        yaw_thresh = [0.05, 0.50]
         if abs(pitch)<pitch_thresh[0]:
             x_input = 0
         elif abs(pitch)>pitch_thresh[1]:
-            x_input = - np.sign(pitch) * pitch_thresh[1]
+            x_input = 0#- np.sign(pitch) * pitch_thresh[1]
         else:
             x_input = - pitch
 
         if abs(roll)<roll_thresh[0]:
             y_input = 0
         elif abs(roll)>roll_thresh[1]:
-            x_input = np.sign(roll) * roll_thresh[1]
+            y_input = 0#np.sign(roll) * roll_thresh[1]
         else:
             y_input = roll
-        # print roll, pitch
 
-        # z_disp = drone.pose[2] - set_point[2]
-        # if abs(z_disp)<0.015:
-        #     z_input = 0
-        # else:
-        #     z_input = z_disp
+        if abs(yaw)<yaw_thresh[0]:
+            yaw_input = 0
+        elif abs(yaw)>roll_thresh[1]:
+            yaw_input = np.sign(yaw) * yaw_thresh[1]
+        else:
+            yaw_input = yaw
 
-        cmd_vel = vel_koef*(np.array([x_input, y_input, 0]))
+        dz_thresh = [0.04, 0.15]
+        if abs(dz)<dz_thresh[0]:
+            z_input = 0
+        elif abs(dz)>dz_thresh[1]:
+            z_input = np.sign(dz) * dz_thresh[1]
+        else:
+            z_input = dz
+
+        cmd_vel = vel_koef*(np.array([x_input, y_input, z_input]))
+        yaw_input = yaw_koef * yaw_input
         # print 'cmd_vel', cmd_vel
         # np.putmask(cmd_vel, abs(cmd_vel) <= (vel_koef*0.035), 0)
         # np.putmask(cmd_vel, abs(cmd_vel) <= (0.20), 0)
@@ -244,7 +262,8 @@ if __name__ == "__main__":
 
         # drones formation:
         if keep_formation and len(drones)>1:
-            drones[1].sp = drones[0].sp + np.array([-0.86*params.l , params.l/2., 0])
+            # drones[1].sp = drones[0].sp + np.array([-0.86*params.l , params.l/2., 0])
+            drones[1].sp = drones[0].sp + np.array([0 , -params.l, 0])
             # drones[2].sp = drones[0].sp + np.array([-0.86*params.l ,-params.l/2., 0])
 
         # correct point to follow with local planner
@@ -263,11 +282,11 @@ if __name__ == "__main__":
                 np.putmask(drone.sp, drone.sp <= limits_negative, limits_negative)
 
         if toFly:
-            for drone in drones: drone.fly()
+            for drone in drones: drone.fly_yaw(yaw=yaw_input)
 
         # visualization: RVIZ
         for drone in drones:
-            drone.publish_sp()
+            drone.publish_sp(orient=np.array([0,0,yaw_input]))
             drone.publish_path_sp()
         for obstacle in obstacles: obstacle.publish_position()
         # visualization: matplotlib
@@ -286,9 +305,9 @@ if __name__ == "__main__":
 
 
         # RETURN JOYSTICK TO THE SWARM
-        Z = 0.8
+        Z = JOYSTICK_TAKEOFF_HEIGHT
         # if drone_joystick.pose[2] > Z + 0.07:
-        if (Z - drone_joystick.pose[2]) > 0.20 and toFly:
+        if (Z - drone_joystick.pose[2]) > 0.15 and toFly:
             # print 'Returning joystick...'
             # hover(t=4)
 
