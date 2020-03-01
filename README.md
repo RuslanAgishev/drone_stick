@@ -37,7 +37,7 @@ Adjust drone URI you use in the launch file [here](https://github.com/RuslanAgis
 
 And use our repository alongside with crazyflie_ros driver.
 ```
-cp ~/Desktop/drone_stick/flight_code/scripts/interactive_control_vr.py ~/catkin_ws/src/crazyflie_ros/crazyflie_demo/scripts/
+cp -r ~/Desktop/drone_stick/flight_code/scripts/interactive_control_vr ~/catkin_ws/src/crazyflie_ros/crazyflie_demo/scripts/
 cp ~/Desktop/drone_stick/flight_code/launch/connect1.launch ~/catkin_ws/src/crazyflie_ros/crazyflie_demo/launch
 ```
 
